@@ -84,6 +84,8 @@ class SVP56_state(object):
         self.DClevel = 0.0  # (double) average level since last reset
         self.ActivityFactor = 0.0 # (double) Activity factor since last reset
 
+    def __repr__(self):
+        return "<SVP56_state '%s' : '%s'>" % (self.f, self.a)
 
     def SVP56_get_rms_dB(self):
         return self.rmsdB
@@ -113,18 +115,18 @@ M = 15.9       # in [dB]
 THRES_NO = 15  # number of thresholds in the speech voltmeter
 MIN_LOG_OFFSET=1e-20 # Hooked to eliminate sigularity with log(0.0) (happens w/all-0 data blocks
     
-def bin_interp(upcount, lwcount, upcount, lwthr, Margin, tol):
+def bin_interp(upcount, lwcount, upthr, lwthr, Margin, tol):
 
     # Consistency check
     if tol < 0.:
         tol = -1.0 * tol
     
     # Check if extreme counts are not already the true active value
-    interno = 1
-    diff = math.abs((upcount - upthr) - Marnig)
+    iterno = 1
+    diff = math.fabs((upcount - upthr) - Margin)
     if diff < tol:
         return upcount
-    diff = math.abs((lwcount - lwthr) - Marnig)
+    diff = math.fabs((lwcount - lwthr) - Margin)
     if diff < tol:
         return lwcount
     
@@ -133,13 +135,13 @@ def bin_interp(upcount, lwcount, upcount, lwthr, Margin, tol):
     midthr = (upthr + lwthr) / 2.0
     
     # Repeats loop until `diff' falls inside the tolerance (-tol<=diff<=tol)
-    while (diff = (midcount - midthr) - Margin, math.fabs(diff)) > tol:
-        
+    diff = (midcount - midthr) - Margin
+    while math.fabs(diff) > tol:
         # if tolerance is not met up to 20 iteractions, then relax the 
         # tolerance by 10
         iterno += 1
         if iterno > 20:
-            tol *= 1.0
+            tol *= 1.1
         
         if diff > tol:
             # then new bounds are ... 
@@ -153,6 +155,8 @@ def bin_interp(upcount, lwcount, upcount, lwthr, Margin, tol):
             midthr = (midthr + lwthr) / 2.0         # ... and thresholds
             upcount = midcount
             upthr = midthr
+        
+        diff = (midcount - midthr) - Margin
 
     # Since the tolerance has been satisfied, midcount is selected 
     # as the interpolated value with a tol [dB] tolerance. */
@@ -161,6 +165,7 @@ def bin_interp(upcount, lwcount, upcount, lwthr, Margin, tol):
 def init_speech_voltmeter(state, sampl_freq):
     
     # First initializations
+    state.f = sampl_freq
     I = math.floor(H * state.f + 0.5)
     
     # Inicialization of threshold vector
@@ -185,16 +190,17 @@ def init_speech_voltmeter(state, sampl_freq):
     # Defining the 0 dB reference level in terms of normalized values
     state.refdB = 0 # dBov
         
-def speech_voltmeter(buffer, smpno, state):
+def speech_voltmeter(buffer, state):
     
     # Some initializations
     I = math.floor(H * state.f + 0.5)
     g = math.exp(-1.0 / (state.f * T))
-    
+    smpno = len(buffer)
+
     # Calculates statistics for all given data points
     for k in range(smpno):
         x = buffer[k]
-        
+
         # Compares the sample with the max. already found for the file
         if math.fabs(x) > state.max:
             state.max = math.fabs(x)
@@ -250,14 +256,14 @@ def speech_voltmeter(buffer, smpno, state):
             Delta[j] = AdB - CdB
             # then interpolates to find the active
             # level and the activity factor and exits
-            if Delta[j] <= state.M
+            if Delta[j] <= M:
                 # AmdB is AdB for j-1, CmdB is CdB for j-1
                 AmdB = 10 * math.log10(((state.sq) / state.a[j - 1]) + MIN_LOG_OFFSET)
                 CmdB = 20 * math.log10(float(state.c[j - 1]) + MIN_LOG_OFFSET)
-
+                print(j, AdB, AmdB, CdB, CmdB)
                 ActiveSpeechLevel = bin_interp(AdB, AmdB, CdB, CmdB, M, 0.5 )
                 
                 state.ActivityFactor = math.pow(10.0, ((LongTermLevel - ActiveSpeechLevel) / 10))
                 break
                 
-   return ActiveSpeechLevel
+    return ActiveSpeechLevel
